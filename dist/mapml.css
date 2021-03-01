@@ -391,9 +391,9 @@ summary {
 }
 
 .mapml-crosshair {
-  margin: -18px 0 0 -18px;
-  width: 36px;
-  height: 36px;
+  margin: -36px 0 0 -36px;
+  width: 72px;
+  height: 72px;
   left: 50%;
   top: 50%;
   content: '';
@@ -426,4 +426,24 @@ summary {
   white-space: nowrap;
   text-align: center;
   padding: 2px;
+}
+
+.mapml-outline {
+  outline-style: auto;
+  outline-offset: -1px;
+  z-index: 1000;
+  pointer-events: none;
+  position: relative;
+}
+
+.mapml-control-summary-container {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  width: 100%;
+}
+
+.mapml-layer-remove-button {
+  margin-left: 15px;
+  text-decoration: none;
 }
