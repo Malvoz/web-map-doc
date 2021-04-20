@@ -1912,6 +1912,7 @@
       },
       changeOpacity: function(opacity) {
           this._container.style.opacity = opacity;
+          if(this.opacityEl) this.opacityEl.value = opacity;
       },
       onAdd: function (map) {
           if(this._extent && !this._validProjection(map)){
@@ -2045,11 +2046,9 @@
         let noLayer = false;
         if(this._templateVars){
           for(let template of this._templateVars)
-            if(!template.projectionMatch) noLayer = true;
+            if(!template.projectionMatch && template.projection !== map.options.projection) noLayer = true;
         }
-        if(noLayer || this.getProjection() !== map.options.projection.toUpperCase())
-          return false;
-        return true;
+        return !(noLayer || this.getProjection() !== map.options.projection.toUpperCase());
       },
 
       //sets the <layer-> elements .bounds property 
@@ -2118,31 +2117,26 @@
             // since we are following a zoom link we will be getting a new
             // layer almost, resetting child content as appropriate
             this._href = this._extent.zoomin;
+            this._layerEl.src = this._extent.zoomin;
             // this.href is the "public" property. When a dynamic layer is
             // accessed, this value changes with every new extent received
             this.href = this._extent.zoomin;
+            this._layerEl.src = this._extent.zoomin;
           } else if (this._extent.zoomout && toZoom < min) {
             this._href = this._extent.zoomout;
             this.href = this._extent.zoomout;
+            this._layerEl.src = this._extent.zoomout;
           }
         }
-        if (this._templatedLayer && canZoom ) {
-          // get the new extent
-          this._initExtent();
-        }
+        if (this._templatedLayer && canZoom ) ;
       },
       onRemove: function (map) {
           L.DomUtil.remove(this._container);
-          if(this._staticTileLayer){
-            map.removeLayer(this._staticTileLayer);
-          }
-          if(this._mapmlvectors){
-            map.removeLayer(this._mapmlvectors);
-          }
-          map.removeLayer(this._imageLayer);
-          if (this._templatedLayer) {
-              map.removeLayer(this._templatedLayer);
-          }
+          if(this._staticTileLayer) map.removeLayer(this._staticTileLayer);
+          if(this._mapmlvectors) map.removeLayer(this._mapmlvectors);
+          if(this._imageLayer) map.removeLayer(this._imageLayer);
+          if (this._templatedLayer) map.removeLayer(this._templatedLayer);
+
           map.fire("checkdisabled");
           map.off("popupopen", this._attachSkipButtons);
       },
@@ -2342,6 +2336,7 @@
           opacityControlSummary = document.createElement('summary'),
           opacityControlSummaryLabel = document.createElement('label'),
           mapEl = this._layerEl.parentNode;
+          this.opacityEl = opacity;
           
           summaryContainer.classList.add('mapml-control-summary-container');
           
@@ -2569,6 +2564,9 @@
                        
                       layer.fire('changeprojection', {href:  (new URL(selectedAlternate.getAttribute('href'), base)).href}, false);
                       return;
+                  } else if (!projectionMatch && layer._map && layer._map.options.mapEl.querySelectorAll("layer-").length === 1){
+                    layer._map.options.mapEl.projection = projection;
+                    return;
                   } else if (serverExtent.querySelector('link[rel=tile],link[rel=image],link[rel=features],link[rel=query]') &&
                           serverExtent.hasAttribute("units")) {
                     layer._templateVars = [];
@@ -4553,7 +4551,7 @@
     },
 
     handleLink: function (link, leafletLayer) {
-      let zoomTo, justPan = false, layer;
+      let zoomTo, justPan = false, layer, map = leafletLayer._map;
       if(link.type === "text/html" && link.target !== "_blank"){  // all other target values other than blank behave as _top
         link.target = "_top";
       } else if (link.type !== "text/html" && link.url.includes("#")){
@@ -4572,33 +4570,43 @@
             if (link.type === "text/html") {
               window.open(link.url);
             } else {
-              leafletLayer._map.options.mapEl.appendChild(layer);
+              map.options.mapEl.appendChild(layer);
               newLayer = true;
             }
             break;
           case "_parent":
-            for (let l of leafletLayer._map.options.mapEl.querySelectorAll("layer-"))
-              if (l._layer !== leafletLayer) leafletLayer._map.options.mapEl.removeChild(l);
-            leafletLayer._map.options.mapEl.appendChild(layer);
-            leafletLayer._map.options.mapEl.removeChild(leafletLayer._layerEl);
+            for (let l of map.options.mapEl.querySelectorAll("layer-"))
+              if (l._layer !== leafletLayer) map.options.mapEl.removeChild(l);
+            map.options.mapEl.appendChild(layer);
+            map.options.mapEl.removeChild(leafletLayer._layerEl);
             newLayer = true;
             break;
           case "_top":
             window.location.href = link.url;
             break;
           default:
+            opacity = leafletLayer._layerEl.opacity;
             leafletLayer._layerEl.insertAdjacentElement('beforebegin', layer);
-            leafletLayer._map.options.mapEl.removeChild(leafletLayer._layerEl);
+            map.options.mapEl.removeChild(leafletLayer._layerEl);
             newLayer = true;
         }
         if(!link.inPlace && newLayer) L.DomEvent.on(layer,'extentload', function focusOnLoad(e) {
+          if(newLayer && ["_parent", "_self"].includes(link.target) && layer.parentElement.querySelectorAll("layer-").length === 1)
+            layer.parentElement.projection = layer._layer.getProjection();
           if(layer.extent){
             if(zoomTo) layer.parentElement.zoomTo(+zoomTo.lat, +zoomTo.lng, +zoomTo.z);
             else layer.focus();
             L.DomEvent.off(layer, 'extentload', focusOnLoad);
           }
+
+          if(opacity) layer.opacity = opacity;
+          map.getContainer().focus();
         });
-      } else if (zoomTo && !link.inPlace && justPan) leafletLayer._map.options.mapEl.zoomTo(+zoomTo.lat, +zoomTo.lng, +zoomTo.z);
+      } else if (zoomTo && !link.inPlace && justPan){
+        leafletLayer._map.options.mapEl.zoomTo(+zoomTo.lat, +zoomTo.lng, +zoomTo.z);
+        if(opacity) layer.opacity = opacity;
+        map.getContainer().focus();
+      }
     },
   };
 
