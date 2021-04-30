@@ -521,11 +521,11 @@
         let zoom = mapml.getAttribute("zoom") || nativeZoom, title = mapml.querySelector("featurecaption");
         title = title ? title.innerHTML : "Feature";
 
-        let propertyContainer = document.createElement('div');
-        propertyContainer.classList.add("mapml-popup-content");
-        propertyContainer.insertAdjacentHTML('afterbegin', mapml.querySelector("properties").innerHTML);
-
-        options.properties = propertyContainer;
+        if(mapml.querySelector("properties")) {
+          options.properties = document.createElement('div');
+          options.properties.classList.add("mapml-popup-content");
+          options.properties.insertAdjacentHTML('afterbegin', mapml.querySelector("properties").innerHTML);
+        }
 
         let layer = this.geometryToLayer(mapml, options, nativeCS, +zoom, title);
         if (layer) {
@@ -3697,6 +3697,10 @@
           callback:this._toggleDebug,
         },
         {
+          text:"Copy MapML (<kbd>M</kbd>)",
+          callback:this._copyMapML,
+        },
+        {
           text:"View Map Source (<kbd>V</kbd>)",
           callback:this._viewSource,
         },
@@ -3740,6 +3744,7 @@
 
       this._items[6].el = this._createItem(this._container, this._items[6]);
       this._items[7].el = this._createItem(this._container, this._items[7]);
+      this._items[8].el = this._createItem(this._container, this._items[8]);
 
       this._layerMenu = L.DomUtil.create("div", "mapml-contextmenu mapml-layer-menu", map._container);
       this._layerMenu.style.zIndex = 10001;
@@ -3802,9 +3807,7 @@
           tL = layerElem.extent.topLeft.pcrs,
           bR = layerElem.extent.bottomRight.pcrs;
 
-      let data = `top-left-easting,${tL.horizontal}\ntop-left-northing,${tL.vertical}\n`;
-      data += `bottom-right-easting,${bR.horizontal}\nbottom-right-northing,${bR.vertical}`;
-
+      let data = `<meta name="extent" content="top-left-easting,${tL.horizontal}, top-left-northing,${tL.vertical}, bottom-right-easting,${bR.horizontal}, bottom-right-northing,${bR.vertical}">`;
       context._copyData(data);
     },
 
@@ -3831,6 +3834,12 @@
     _toggleControls: function(e){
       let mapEl = e instanceof KeyboardEvent?this._map.options.mapEl:this.options.mapEl;
       mapEl._toggleControls();
+    },
+
+    _copyMapML: function(e){
+      let context = e instanceof KeyboardEvent ? this._map.contextMenu : this.contextMenu,
+        mapEl = e instanceof KeyboardEvent?this._map.options.mapEl:this.options.mapEl;
+      context._copyData(mapEl.outerHTML.replace(/<div class="mapml-web-map">.*?<\/div>|<style>\[is="web-map"].*?<\/style>|<style>mapml-viewer.*?<\/style>/gm, ""));
     },
 
     _viewSource: function(e){
@@ -4074,6 +4083,7 @@
             this._coordMenu.style.display = 'none';
             this._layerMenu.style.display = 'none';
             this._map.fire('contextmenu.hide', {contextmenu: this});
+            setTimeout(() => this._map._container.focus(), 0);
         }
     },
 
@@ -4129,64 +4139,55 @@
         return size;
     },
 
-     _debounceKeyDown: function(func, wait, immediate) {
-      let timeout;
-      let context = this, args = arguments;
-      clearTimeout(timeout);
-      timeout = setTimeout(function() {
-        timeout = null;
-        if (!immediate) func.apply(context, args);
-      }, wait);
-      if (immediate && !timeout) func.apply(context, args);
-    },
-
     _onKeyDown: function (e) {
       if(!this._mapMenuVisible) return;
-      this._debounceKeyDown(function(){
-        let key = e.keyCode;
-        if(key !== 16 && key!== 9 && !(!this._layerClicked && key === 67) && e.path[0].innerText !== "Copy Coordinates (C) >")
+
+      let key = e.keyCode;
+      if(key !== 16 && key!== 9 && !(!this._layerClicked && key === 67) && e.path[0].innerText !== "Copy Coordinates (C) >")
+        this._hide();
+      switch(key){
+        case 32:  //SPACE KEY
+          if(this._map._container.parentNode.activeElement.parentNode.classList.contains("mapml-contextmenu"))
+            this._map._container.parentNode.activeElement.click();
+          break;
+        case 66: //B KEY
+          this._goBack(e);
+          break;
+        case 67: //C KEY
+          if(this._layerClicked){
+            this._copyLayerExtent(e);
+          } else {
+            this._copyCoords({
+              latlng:this._map.getCenter()
+            });
+          }
+          break;
+        case 68: //D KEY
+          this._toggleDebug(e);
+          break;
+        case 77: //M KEY
+          this._copyMapML(e);
+          break;
+        case 70: //F KEY
+          this._goForward(e);
+          break;
+        case 82: //R KEY
+          this._reload(e);
+          break;
+        case 84: //T KEY
+          this._toggleControls(e);
+          break;
+        case 86: //V KEY
+          this._viewSource(e);
+          break;
+        case 27: //H KEY
           this._hide();
-        switch(key){
-          case 32:  //SPACE KEY
-            if(this._map._container.parentNode.activeElement.parentNode.classList.contains("mapml-contextmenu"))
-              this._map._container.parentNode.activeElement.click();
-            break;
-          case 66: //B KEY
-            this._goBack(e);
-            break;
-          case 67: //C KEY
-            if(this._layerClicked){
-              this._copyLayerExtent(e);
-            } else {
-              this._copyCoords({
-                latlng:this._map.getCenter()
-              });
-            }
-            break;
-          case 68:
-            this._toggleDebug(e);
-            break;
-          case 70:
-            this._goForward(e);
-            break;
-          case 82: //R KEY
-            this._reload(e);
-            break;
-          case 84: //T KEY
-            this._toggleControls(e);
-            break;
-          case 86: //V KEY
-            this._viewSource(e);
-            break;
-          case 27: //H KEY
-            this._hide();
-            break;
-          case 90: //Z KEY
-            if(this._layerClicked)
-              this._zoomToLayer(e);
-            break;
-        }
-      },250);
+          break;
+        case 90: //Z KEY
+          if(this._layerClicked)
+            this._zoomToLayer(e);
+          break;
+      }
     },
 
     _showCoordMenu: function(e){
@@ -4432,18 +4433,18 @@
     },
 
     convertPCRSBounds: function(pcrsBounds, zoom, projection, cs){
-      if(!pcrsBounds || !zoom && +zoom !== 0 || !cs) return undefined;
-      switch (cs.toLowerCase()) {
-        case "pcrs":
+      if(!pcrsBounds || (!zoom && zoom !== 0) || !Number.isFinite(+zoom) || !projection || !cs) return undefined;
+      switch (cs.toUpperCase()) {
+        case "PCRS":
           return pcrsBounds;
-        case "tcrs": 
-        case "tilematrix":
+        case "TCRS":
+        case "TILEMATRIX":
           let minPixel = this[projection].transformation.transform(pcrsBounds.min, this[projection].scale(+zoom)),
               maxPixel = this[projection].transformation.transform(pcrsBounds.max, this[projection].scale(+zoom));
-          if (cs.toLowerCase() === "tcrs") return L.bounds(minPixel, maxPixel);
+          if (cs.toUpperCase() === "TCRS") return L.bounds(minPixel, maxPixel);
           let tileSize = M[projection].options.crs.tile.bounds.max.x;
           return L.bounds(L.point(minPixel.x / tileSize, minPixel.y / tileSize), L.point(maxPixel.x / tileSize,maxPixel.y / tileSize)); 
-        case "gcrs":
+        case "GCRS":
           let minGCRS = this[projection].unproject(pcrsBounds.min),
               maxGCRS = this[projection].unproject(pcrsBounds.max);
           return L.bounds(L.point(minGCRS.lng, minGCRS.lat), L.point(maxGCRS.lng, maxGCRS.lat)); 
@@ -4452,37 +4453,37 @@
       }
     },
 
-    pointToPCRSPoint: function(p, zoom, projection, cs){
-      if(!p || !zoom && +zoom !== 0 || !cs || !projection) return undefined;
+    pointToPCRSPoint: function(point, zoom, projection, cs){
+      if(!point || (!zoom && zoom !== 0) || !Number.isFinite(+zoom) || !cs || !projection) return undefined;
       let tileSize = M[projection].options.crs.tile.bounds.max.x;
       switch(cs.toUpperCase()){
         case "TILEMATRIX":
-          return M.pixelToPCRSPoint(L.point(p.x*tileSize,p.y*tileSize),zoom,projection);
+          return M.pixelToPCRSPoint(L.point(point.x*tileSize,point.y*tileSize),zoom,projection);
         case "PCRS":
-          return p;
+          return point;
         case "TCRS" :
-          return M.pixelToPCRSPoint(p,zoom,projection);
+          return M.pixelToPCRSPoint(point,zoom,projection);
         case "GCRS":
-          return this[projection].project(L.latLng(p.y,p.x));
+          return this[projection].project(L.latLng(point.y,point.x));
         default:
           return undefined;
       }
     },
 
-    pixelToPCRSPoint: function(p, zoom, projection){
-      if(!p || !zoom && +zoom !== 0) return undefined;
-      return this[projection].transformation.untransform(p,this[projection].scale(zoom));
+    pixelToPCRSPoint: function(point, zoom, projection){
+      if(!point || (!zoom && zoom !== 0) || !Number.isFinite(+zoom) || !projection) return undefined;
+      return this[projection].transformation.untransform(point,this[projection].scale(zoom));
     },
 
     boundsToPCRSBounds: function(bounds, zoom, projection, cs){
-      if(!bounds || !zoom && +zoom !== 0 || !cs) return undefined;
+      if(!bounds || !bounds.max || !bounds.min || (!zoom && zoom !== 0) || !Number.isFinite(+zoom) || !projection || !cs) return undefined;
       return L.bounds(M.pointToPCRSPoint(bounds.min, zoom, projection, cs), M.pointToPCRSPoint(bounds.max, zoom, projection, cs));
     },
 
     //L.bounds have fixed point positions, where min is always topleft, max is always bottom right, and the values are always sorted by leaflet
     //important to consider when working with pcrs where the origin is not topleft but rather bottomleft, could lead to confusion
     pixelToPCRSBounds : function(bounds, zoom, projection){
-      if(!bounds || !bounds.max || !bounds.min ||zoom === undefined || zoom === null || zoom instanceof Object) return undefined;
+      if(!bounds || !bounds.max || !bounds.min || (!zoom && zoom !== 0) || !Number.isFinite(+zoom) || !projection) return undefined;
       return L.bounds(M.pixelToPCRSPoint(bounds.min, zoom, projection), M.pixelToPCRSPoint(bounds.max, zoom, projection));
     },
     //meta content is the content attribute of meta
@@ -4826,6 +4827,7 @@
       L.setOptions(this, options);
 
       this.group = this.options.group;
+      this.options.interactive = this.options.link || (this.options.properties && this.options.onEachFeature);
 
       this._parts = [];
       this._markup = markup;
@@ -4842,17 +4844,18 @@
 
     /**
      * Attaches link handler to the sub parts' paths
-     * @param path
-     * @param link
+     * @param {SVGElement} elem - The element to add listeners to, either path or g elements
+     * @param {Object} link - The link object that contains the url, type and target data
      * @param leafletLayer
      */
-    attachLinkHandler: function (path, link, leafletLayer) {
+    attachLinkHandler: function (elem, link, leafletLayer) {
       let dragStart, container = document.createElement('div'), p = document.createElement('p'), hovered = false;
       container.classList.add('mapml-link-preview');
       container.appendChild(p);
-      path.classList.add('map-a');
-      L.DomEvent.on(path, 'mousedown', e => dragStart = {x:e.clientX, y:e.clientY}, this);
-      L.DomEvent.on(path, "mouseup", (e) => {
+      elem.classList.add('map-a');
+      if (link.visited) elem.classList.add("map-a-visited");
+      L.DomEvent.on(elem, 'mousedown', e => dragStart = {x:e.clientX, y:e.clientY}, this);
+      L.DomEvent.on(elem, "mouseup", (e) => {
         let onTop = true, nextLayer = this.options._leafletLayer._layerEl.nextElementSibling;
         while(nextLayer && onTop){
           if(nextLayer.tagName && nextLayer.tagName.toUpperCase() === "LAYER-")
@@ -4862,15 +4865,24 @@
         if(onTop && dragStart) {
           L.DomEvent.stop(e);
           let dist = Math.sqrt(Math.pow(dragStart.x - e.clientX, 2) + Math.pow(dragStart.y - e.clientY, 2));
-          if (dist <= 5) M.handleLink(link, leafletLayer);
+          if (dist <= 5){
+            link.visited = true;
+            elem.setAttribute("stroke", "#6c00a2");
+            elem.classList.add("map-a-visited");
+            M.handleLink(link, leafletLayer);
+          }
         }
       }, this);
-      L.DomEvent.on(path, "keypress", (e) => {
+      L.DomEvent.on(elem, "keypress", (e) => {
         L.DomEvent.stop(e);
-        if(e.keyCode === 13 || e.keyCode === 32)
+        if(e.keyCode === 13 || e.keyCode === 32) {
+          link.visited = true;
+          elem.setAttribute("stroke", "#6c00a2");
+          elem.classList.add("map-a-visited");
           M.handleLink(link, leafletLayer);
+        }
       }, this);
-      L.DomEvent.on(path, 'mouseenter keyup', (e) => {
+      L.DomEvent.on(elem, 'mouseenter keyup', (e) => {
         if(e.target !== e.currentTarget) return;
         hovered = true;
         let resolver = document.createElement('a'), mapWidth = this._map.getContainer().clientWidth;
@@ -4886,7 +4898,7 @@
           if(hovered) p.innerHTML = resolver.href;
         }, 1000);
       }, this);
-      L.DomEvent.on(path, 'mouseout keydown mousedown', (e) => {
+      L.DomEvent.on(elem, 'mouseout keydown mousedown', (e) => {
         if(e.target !== e.currentTarget || !container.parentElement) return;
         hovered = false;
         this._map.getContainer().removeChild(container);
@@ -4954,6 +4966,7 @@
 
     /**
      * Converts the spans, a and divs around a geometry subtype into options for the feature
+     * @param {HTMLElement[]} elems - The current zoom level of the map
      * @private
      */
     _convertWrappers: function (elems) {
@@ -4961,12 +4974,6 @@
       let classList = '', output = {};
       for(let elem of elems){
         if(elem.tagName.toUpperCase() !== "MAP-A" && elem.className){
-          // Useful if getting other attributes off spans and divs is useful
-  /*        let attr = elem.attributes;
-          for(let i = 0; i < attr.length; i++){
-            if(attr[i].name === "class" || attributes[attr[i].name]) continue;
-            attributes[attr[i].name] = attr[i].value;
-          }*/
           classList +=`${elem.className} `;
         } else if(!output.link && elem.getAttribute("href")) {
           let link = {};
@@ -4998,18 +5005,18 @@
 
       let first = true;
       for (let c of this._markup.querySelectorAll('coordinates')) {              //loops through the coordinates of the child
-        let ring = [], subrings = [];
-        this._coordinateToArrays(c, ring, subrings, this.options.className);              //creates an array of pcrs points for the main ring and the subparts
+        let ring = [], subRings = [];
+        this._coordinateToArrays(c, ring, subRings, this.options.className);              //creates an array of pcrs points for the main ring and the subparts
         if (!first && this.type === "POLYGON") {
           this._parts[0].rings.push(ring[0]);
-          if (subrings.length > 0)
-            this._parts[0].subrings = this._parts[0].subrings.concat(subrings);
+          if (subRings.length > 0)
+            this._parts[0].subrings = this._parts[0].subrings.concat(subRings);
         } else if (this.type === "MULTIPOINT") {
-          for (let point of ring[0].points.concat(subrings)) {
+          for (let point of ring[0].points.concat(subRings)) {
             this._parts.push({ rings: [{ points: [point] }], subrings: [], cls:`${point.cls || ""} ${this.options.className || ""}`.trim() });
           }
         } else {
-          this._parts.push({ rings: ring, subrings: subrings, cls: `${this.featureAttributes.class || ""} ${this.options.className || ""}`.trim() });
+          this._parts.push({ rings: ring, subrings: subRings, cls: `${this.featureAttributes.class || ""} ${this.options.className || ""}`.trim() });
         }
         first = false;
       }
@@ -5080,7 +5087,13 @@
           if(attr[i].name === "class") continue;
           attrMap[attr[i].name] = attr[i].value;
         }
-        subParts.unshift({ points: local, cls: `${cls || ""} ${wrapperAttr.className || ""}`.trim(), attr: attrMap, link: wrapperAttr.link, linkTarget: wrapperAttr.linkTarget, linkType: wrapperAttr.linkType});
+        subParts.unshift({
+          points: local,
+          cls: `${cls || ""} ${wrapperAttr.className || ""}`.trim(),
+          attr: attrMap,
+          link: wrapperAttr.link,
+          linkTarget: wrapperAttr.linkTarget,
+          linkType: wrapperAttr.linkType});
       }
     },
 
@@ -5150,7 +5163,7 @@
       //creates the main parts and sub parts paths
       for (let p of layer._parts) {
         if (p.rings){
-          this._createPath(p, layer.options.className, layer.featureAttributes['aria-label'], true, layer.featureAttributes);
+          this._createPath(p, layer.options.className, layer.featureAttributes['aria-label'], layer.options.interactive, layer.featureAttributes);
           if(layer.outlinePath) p.path.style.stroke = "none";
         }
         if (p.subrings) {
@@ -5313,13 +5326,6 @@
       if (!path || !layer) { return; }
       let options = layer.options, isClosed = layer.isClosed;
       if ((options.stroke && (!isClosed || isOutline)) || (isMain && !layer.outlinePath)) {
-        if (options.link){
-          path.style.stroke = "#0000EE";
-          path.style.strokeOpacity = "1";
-          path.style.strokeWidth = "1px";
-          path.style.strokeDasharray = "none";
-
-        }
         path.setAttribute('stroke', options.color);
         path.setAttribute('stroke-opacity', options.opacity);
         path.setAttribute('stroke-width', options.weight);
@@ -5336,6 +5342,13 @@
           path.setAttribute('stroke-dashoffset', options.dashOffset);
         } else {
           path.removeAttribute('stroke-dashoffset');
+        }
+
+        if (options.link){
+          path.setAttribute("stroke", options.link.visited?"#6c00a2":"#0000EE");
+          path.setAttribute("stroke-opacity", "1");
+          path.setAttribute("stroke-width", "1px");
+          path.setAttribute("stroke-dasharray", "none");
         }
       } else {
         path.setAttribute('stroke', 'none');
@@ -5410,7 +5423,7 @@
 
       L.LayerGroup.prototype.initialize.call(this, layers, options);
 
-      if(this.options.onEachFeature || this.options.link) {
+      if((this.options.onEachFeature && this.options.properties) || this.options.link) {
         this.options.group.setAttribute('tabindex', '0');
         L.DomUtil.addClass(this.options.group, "leaflet-interactive");
         L.DomEvent.on(this.options.group, "keyup keydown mousedown", this._handleFocus, this);
@@ -5431,7 +5444,7 @@
 
     /**
      * Handler for focus events
-     * @param {L.DOMEvent} e - Event that occured
+     * @param {L.DOMEvent} e - Event that occurred
      * @private
      */
     _handleFocus: function(e) {
@@ -5449,8 +5462,12 @@
       }
     },
 
+    /**
+     * Add a M.Feature to the M.FeatureGroup
+     * @param layer
+     */
     addLayer: function (layer) {
-      if(!layer.options.link && this.options.onEachFeature) {
+      if(!layer.options.link && layer.options.interactive) {
         this.options.onEachFeature(this.options.properties, layer);
       }
       L.FeatureGroup.prototype.addLayer.call(this, layer);
