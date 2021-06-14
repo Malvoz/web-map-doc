@@ -1941,7 +1941,7 @@
                     var c = document.createElement('div');
                     c.classList.add("mapml-popup-content");
                     c.insertAdjacentHTML('afterbegin', properties.innerHTML);
-                    geometry.bindPopup(c, {autoClose: false, minWidth: 108});
+                    geometry.bindPopup(c, {autoClose: false, minWidth: 165});
                   }
                 }
               });
@@ -1972,7 +1972,7 @@
                         var c = document.createElement('div');
                         c.classList.add("mapml-popup-content");
                         c.insertAdjacentHTML('afterbegin', properties.innerHTML);
-                        geometry.bindPopup(c, {autoClose: false, minWidth: 108});
+                        geometry.bindPopup(c, {autoClose: false, minWidth: 165});
                       }
                     }
                   }).addTo(map);
@@ -3022,7 +3022,10 @@
         let popup = e.popup, map = e.target, layer, group,
             content = popup._container.getElementsByClassName("mapml-popup-content")[0];
 
+        popup._container.setAttribute("role", "dialog");
         content.setAttribute("tabindex", "-1");
+        // https://github.com/Maps4HTML/Web-Map-Custom-Element/pull/467#issuecomment-844307818
+        content.setAttribute("role", "document");
         popup._count = 0; // used for feature pagination
 
         if(popup._source._eventParents){ // check if the popup is for a feature or query
@@ -3032,12 +3035,12 @@
           layer = popup._source._templatedLayer;
         }
 
-        if(popup._container.querySelector('div[class="mapml-focus-buttons"]')){
-          L.DomUtil.remove(popup._container.querySelector('div[class="mapml-focus-buttons"]'));
+        if(popup._container.querySelector('nav[class="mapml-focus-buttons"]')){
+          L.DomUtil.remove(popup._container.querySelector('nav[class="mapml-focus-buttons"]'));
           L.DomUtil.remove(popup._container.querySelector('hr'));
         }
         //add when popopen event happens instead
-        let div = L.DomUtil.create("div", "mapml-focus-buttons");
+        let div = L.DomUtil.create("nav", "mapml-focus-buttons");
 
         // creates |< button, focuses map
         let mapFocusButton = L.DomUtil.create('a',"mapml-popup-button", div);
@@ -3091,7 +3094,6 @@
         }, popup);
     
         let divider = L.DomUtil.create("hr");
-        divider.style.borderTop = "1px solid #bbb";
 
         popup._navigationBar = div;
         popup._content.appendChild(divider);
@@ -5139,7 +5141,25 @@
    * @returns {*}
    */
   var FeatureRenderer = L.SVG.extend({
+    
 
+    /**
+     * Override method of same name from L.SVG, use the this._container property
+     * to set up the role="none presentation" on featureGroupu container,
+     * per this recommendation: 
+     * https://github.com/Maps4HTML/Web-Map-Custom-Element/pull/471#issuecomment-845192246
+     * @private overrides ancestor method so that we have a _container to work with
+     */
+    _initContainer: function () {
+      // call the method we're overriding, per https://leafletjs.com/examples/extending/extending-1-classes.html#methods-of-the-parent-class
+      // note you have to pass 'this' as the first arg
+      L.SVG.prototype._initContainer.call(this);
+      // knowing that the previous method call creates the this._container, we
+      // access it and set the role="none presetation" which suppresses the 
+      // announcement of "Graphic" on each feature focus.
+      this._container.setAttribute('role', 'none presentation');
+    },
+    
     /**
      * Creates all the appropriate path elements for a M.Feature
      * @param {M.Feature} layer - The M.Feature that needs paths generated
@@ -5427,8 +5447,10 @@
         if(layers.length === 1 && firstLayer.options.link) this.options.link = firstLayer.options.link;
         if(this.options.link){
           M.Feature.prototype.attachLinkHandler.call(this, this.options.group, this.options.link, this.options._leafletLayer);
+          this.options.group.setAttribute('role', 'link');
         } else {
           this.options.group.setAttribute("aria-expanded", "false");
+          this.options.group.setAttribute('role', 'button');
           this.options.onEachFeature(this.options.properties, this);
           this.off("click", this._openPopup);
         }
